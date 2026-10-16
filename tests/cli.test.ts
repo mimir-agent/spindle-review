@@ -156,10 +156,32 @@ describe("claude invocation", () => {
     assert.equal(after("--max-turns"), "7");
     assert.ok(args.includes("--restricted"));
     assert.equal(after("--permission-mode"), "dontAsk");
-    assert.equal(after("--tools"), "Read,Grep,Glob,Bash");
-    for (const t of ["Edit", "Write", "NotebookEdit", "WebFetch"]) assert.ok(args.includes(t), `${t} disallowed`);
-    const bash = args.filter((a) => a.startsWith("Bash("));
-    assert.ok(bash.length > 0);
-    for (const b of bash) assert.match(b, /^Bash\(git (log|show|diff|blame|grep):\*\)$/);
+  });
+
+  // Pinned exactly. Widening any of these (adding Bash or a Bash(...) rule back,
+  // or dropping a disallowed tool) must fail here and be argued in review.
+  it("offers exactly Read, Grep and Glob and no shell", () => {
+    const allowedAt = args.indexOf("--allowedTools");
+    const disallowedAt = args.indexOf("--disallowedTools");
+    const end = args.includes("--model") ? args.indexOf("--model") : args.length;
+    assert.equal(after("--tools"), "Read,Grep,Glob");
+    assert.deepEqual(args.slice(allowedAt + 1, disallowedAt), ["Read", "Grep", "Glob"]);
+    assert.deepEqual(args.slice(disallowedAt + 1, end), [
+      "Bash",
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "Task",
+    ]);
+    assert.equal(args.filter((a) => a.includes("Bash(")).length, 0, "no Bash rule of any kind");
+    assert.equal(disallowedAt > allowedAt && end === args.length, true, "the tool lists close the argument list");
+  });
+
+  it("pins the same lists when a model is chosen", () => {
+    const withModel = claudeArgs("prompt", { maxTurns: 7, patchDir: "/tmp/p", model: "opus" });
+    assert.deepEqual(withModel.slice(-2), ["--model", "opus"]);
+    assert.deepEqual(withModel.slice(0, -2), args);
   });
 });

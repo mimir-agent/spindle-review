@@ -51,18 +51,16 @@ export const FINDINGS_SCHEMA = {
   required: ["findings"],
 } as const;
 
-// Read-only tools. Bash is offered for git history only; --permission-mode
-// dontAsk denies every command not on this list, and --restricted confines file
-// reads to the working directory and the --add-dir we pass.
-export const TOOLS = ["Read", "Grep", "Glob", "Bash"] as const;
-export const ALLOWED_BASH = [
-  "Bash(git log:*)",
-  "Bash(git show:*)",
-  "Bash(git diff:*)",
-  "Bash(git blame:*)",
-  "Bash(git grep:*)",
-] as const;
-export const DISALLOWED = ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task"] as const;
+// Read-only tools, and no shell. Bash is not offered: prefix rules like
+// Bash(git log:*) still let flags through (git grep -O<cmd> runs a command,
+// git log/diff --output=<file> write files), and the prompt carries text the
+// pull request author wrote. The patches are in the patch dir, and Read, Grep
+// and Glob cover the checkout. --permission-mode dontAsk denies anything not in
+// ALLOWED, and --restricted confines reads to the working directory and the
+// --add-dir we pass. tests/cli.test.ts pins these lists exactly.
+export const TOOLS = ["Read", "Grep", "Glob"] as const;
+export const ALLOWED = ["Read", "Grep", "Glob"] as const;
+export const DISALLOWED = ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task"] as const;
 
 export function readGuidance(repoDir: string): { file: string; text: string }[] {
   const out: { file: string; text: string }[] = [];
@@ -120,7 +118,7 @@ export function buildPrompt(input: ReviewInput, patchDir: string): string {
     "",
     "For each finding give: file (path relative to the repo root), line (in the new version of the file), severity,",
     "problem (one or two sentences), trigger (what input or sequence makes it happen), fix (one or two sentences).",
-    "You may read files and run read-only git commands. You cannot edit anything.",
+    "You may read and search files. You cannot run commands or edit anything.",
   );
   return lines.join("\n");
 }
@@ -145,7 +143,7 @@ export function claudeArgs(prompt: string, opts: { maxTurns: number; patchDir: s
     "--tools",
     TOOLS.join(","),
     "--allowedTools",
-    ...ALLOWED_BASH,
+    ...ALLOWED,
     "--disallowedTools",
     ...DISALLOWED,
   ];

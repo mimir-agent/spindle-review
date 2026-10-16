@@ -10,8 +10,8 @@ CLI.
   file and line, what goes wrong, what triggers it, and the fix. No style notes, no summary. When
   nothing matters it posts one line ("No issues found in round #N."), or nothing with
   `--quiet-when-clean`.
-- **Read-only.** The model can read the checkout and the patches and run read-only git commands
-  (`git log`, `show`, `diff`, `blame`, `grep`). It cannot edit files, write files or run anything else.
+- **Read-only.** The model can read and search the checkout and the patches (the Read, Grep and Glob
+  tools). It has no shell: it cannot run commands, edit files or write files.
 - **One comment.** The review is a single top-level comment on the pull request, written as an
   `sh.tangled.feed.comment` record by an account you choose.
 
