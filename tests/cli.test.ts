@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { main } from "../src/cli.ts";
 import { claudeArgs } from "../src/review.ts";
 import { childEnv } from "../src/secrets.ts";
-import { FINDING, PIPELINE_ENV, PULL_URI, REPO_DID, SHA0, SHA1, harness } from "./fixtures.ts";
+import { FINDING, PIPELINE_ENV, PULL_URI, REPO_DID, SHA0, SHA1, harness, stackedPull } from "./fixtures.ts";
 
 const TOKEN = "sk-ant-oat01-SECRET-TOKEN-VALUE";
 const API_KEY = "sk-ant-api03-SECRET-KEY-VALUE";
@@ -81,6 +81,50 @@ describe("in a spindle pull_request pipeline", () => {
     };
     const h = harness({ ...env, TANGLED_PR_SOURCE_SHA: SHA0 }, [], { extraPulls: [forked] });
     assert.equal(await main(["--dry-run"], h.deps), 0, "the fork pull is ignored, not reported as ambiguous");
+  });
+
+  describe("stacked pulls sharing a source and target branch", () => {
+    const SHA2 = "3333333333333333333333333333333333333333";
+    const stacked = stackedPull("stackedrkey", SHA2);
+
+    it("picks the pull whose latest round ends at the built sha", async () => {
+      const h = harness({ ...env, TANGLED_PR_SOURCE_SHA: SHA1 }, [FINDING], {
+        extraPulls: [stacked.pull],
+        extraBlobs: stacked.blobs,
+      });
+      assert.equal(await main([], h.deps), 0);
+      const create = h.net.calls.find((c) => c.url.endsWith("/xrpc/com.atproto.repo.createRecord"));
+      assert.equal(JSON.parse(String(create?.init?.body)).record.subject.uri, PULL_URI);
+    });
+
+    it("picks the other pull when the built sha is its head", async () => {
+      const h = harness({ ...env, TANGLED_PR_SOURCE_SHA: SHA2 }, [FINDING], {
+        extraPulls: [stacked.pull],
+        extraBlobs: stacked.blobs,
+      });
+      assert.equal(await main([], h.deps), 0);
+      const create = h.net.calls.find((c) => c.url.endsWith("/xrpc/com.atproto.repo.createRecord"));
+      const record = JSON.parse(String(create?.init?.body)).record;
+      assert.equal(record.subject.uri, stacked.pull.uri);
+      assert.equal(record.pullRoundIdx, 0);
+    });
+
+    it("fails clearly when more than one pull's latest round ends at the built sha", async () => {
+      const twin = stackedPull("twinrkey", SHA1);
+      const h = harness({ ...env, TANGLED_PR_SOURCE_SHA: SHA1 }, [], { extraPulls: [twin.pull], extraBlobs: twin.blobs });
+      assert.equal(await main(["--dry-run"], h.deps), 1);
+      assert.match(h.err.join(""), /2 open pull requests from feature into main all have a latest round ending at 2{40}/);
+      assert.equal(h.prompts.length, 0, "nothing was reviewed");
+    });
+
+    it("fails clearly when no pull's latest round ends at the built sha", async () => {
+      const h = harness({ ...env, TANGLED_PR_SOURCE_SHA: SHA0 }, [], {
+        extraPulls: [stacked.pull],
+        extraBlobs: stacked.blobs,
+      });
+      assert.equal(await main(["--dry-run"], h.deps), 1);
+      assert.match(h.err.join(""), /none has a latest round ending at 1{40}\. The round may not be indexed yet/);
+    });
   });
 
   it("dry run prints the one-line clean result and posts nothing", async () => {

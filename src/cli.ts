@@ -171,7 +171,7 @@ async function locatePull(f: Fetch, index: string, uri: string | undefined, env:
         "TANGLED_PR_* are not all set). Pass --pull <at-uri> to review a specific pull request.",
     );
   }
-  return findOpenPull(f, index, repoDid, source, target);
+  return findOpenPull(f, index, repoDid, source, target, env.TANGLED_PR_SOURCE_SHA);
 }
 
 function pickRound(flag: string | undefined, patches: readonly string[], sha: string | undefined): number {

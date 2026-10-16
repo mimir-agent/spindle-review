@@ -6,6 +6,7 @@
 // The write is one com.atproto.repo.createRecord on the reviewer account's PDS.
 
 import { gunzipSync } from "node:zlib";
+import { headSha } from "./rounds.ts";
 
 export type Fetch = typeof fetch;
 
@@ -64,15 +65,16 @@ export async function getPull(f: Fetch, index: string, uri: string): Promise<Pul
 }
 
 // The spindle does not tell a step which pull request started it. It does give
-// the repo DID and the source and target branches, so look the pull up by those.
-// Only same-repo branch pulls get secrets on a spindle, so a pull whose source
-// lives in another repo is never the one we were started for.
+// the repo DID, the source and target branches and the source sha, so look the
+// pull up by those. Only same-repo branch pulls get secrets on a spindle, so a
+// pull whose source lives in another repo is never the one we were started for.
 export async function findOpenPull(
   f: Fetch,
   index: string,
   repoDid: string,
   sourceBranch: string,
   targetBranch: string,
+  sourceSha: string | undefined,
 ): Promise<Pull> {
   const matches: Pull[] = [];
   let cursor: string | undefined;
@@ -97,13 +99,33 @@ export async function findOpenPull(
   if (matches.length === 0) {
     throw new Error(`No open same-repo pull request from ${sourceBranch} into ${targetBranch} in ${repoDid}.`);
   }
-  if (matches.length > 1) {
+  if (matches.length === 1) return matches[0] as Pull;
+
+  // Stacked pulls share a source and target branch. The one this pipeline was
+  // started for is the one whose latest round ends at the sha being built.
+  const listed = matches.map((m) => m.uri).join(", ");
+  if (!sourceSha) {
     throw new Error(
-      `${matches.length} open pull requests from ${sourceBranch} into ${targetBranch}; pass --pull to pick one: ` +
-        matches.map((m) => m.uri).join(", "),
+      `${matches.length} open pull requests from ${sourceBranch} into ${targetBranch}, and no ` +
+        `TANGLED_PR_SOURCE_SHA to tell them apart: ${listed}`,
     );
   }
-  return matches[0] as Pull;
+  const atSha: Pull[] = [];
+  for (const pull of matches) {
+    const latest = pull.record.rounds.at(-1);
+    if (latest !== undefined && headSha(await fetchRoundPatch(f, pull, latest)) === sourceSha) atSha.push(pull);
+  }
+  if (atSha.length === 1) return atSha[0] as Pull;
+  if (atSha.length === 0) {
+    throw new Error(
+      `${matches.length} open pull requests from ${sourceBranch} into ${targetBranch}, and none has a latest round ` +
+        `ending at ${sourceSha}. The round may not be indexed yet; rerun the pipeline. Pulls: ${listed}`,
+    );
+  }
+  throw new Error(
+    `${atSha.length} open pull requests from ${sourceBranch} into ${targetBranch} all have a latest round ending at ` +
+      `${sourceSha}, so this pipeline cannot tell which one it is for: ${atSha.map((m) => m.uri).join(", ")}`,
+  );
 }
 
 export async function resolvePds(f: Fetch, did: string): Promise<string> {
@@ -121,16 +143,18 @@ export async function resolvePds(f: Fetch, did: string): Promise<string> {
 // Every round's patch, oldest first. Each is a gzipped git-format-patch blob in
 // the pull author's repository.
 export async function fetchRoundPatches(f: Fetch, pull: Pull): Promise<string[]> {
+  const out: string[] = [];
+  for (const round of pull.record.rounds) out.push(await fetchRoundPatch(f, pull, round));
+  return out;
+}
+
+async function fetchRoundPatch(f: Fetch, pull: Pull, round: PullRound): Promise<string> {
   const { did } = parsePullUri(pull.uri);
   const pds = await resolvePds(f, did);
-  const out: string[] = [];
-  for (const round of pull.record.rounds) {
-    const cid = round.patchBlob.ref.$link;
-    const res = await f(`${pds}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`);
-    if (!res.ok) throw new Error(`Fetching patch blob ${cid} from ${pds} failed: HTTP ${res.status}`);
-    out.push(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8"));
-  }
-  return out;
+  const cid = round.patchBlob.ref.$link;
+  const res = await f(`${pds}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`);
+  if (!res.ok) throw new Error(`Fetching patch blob ${cid} from ${pds} failed: HTTP ${res.status}`);
+  return gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
 }
 
 export interface PostTarget {

@@ -54,7 +54,8 @@ export interface FakeNet {
 
 // A fake network for the public index, plc.directory, the author's PDS, and
 // the reviewer's PDS. Every request is recorded.
-export function fakeNet(opts: { rounds?: number; extraPulls?: unknown[] } = {}): FakeNet {
+// extraBlobs serves patch blobs for extraPulls, keyed by blob cid.
+export function fakeNet(opts: { rounds?: number; extraPulls?: unknown[]; extraBlobs?: Record<string, string> } = {}): FakeNet {
   const rounds = opts.rounds ?? 2;
   const blobs = [ROUND0, ROUND1];
   const calls: FakeNet["calls"] = [];
@@ -74,7 +75,10 @@ export function fakeNet(opts: { rounds?: number; extraPulls?: unknown[] } = {}):
       return json({ service: [{ id: "#atproto_pds", type: "AtprotoPersonalDataServer", serviceEndpoint: PDS }] });
     }
     if (u.pathname === "/xrpc/com.atproto.sync.getBlob") {
-      const i = Number(u.searchParams.get("cid")?.replace("bafkblob", ""));
+      const cid = u.searchParams.get("cid") ?? "";
+      const extra = opts.extraBlobs?.[cid];
+      if (extra !== undefined) return new Response(gzipSync(extra), { status: 200 });
+      const i = Number(cid.replace("bafkblob", ""));
       return new Response(gzipSync(blobs[i] ?? ""), { status: 200 });
     }
     if (u.pathname === "/xrpc/com.atproto.server.createSession") {
@@ -86,6 +90,25 @@ export function fakeNet(opts: { rounds?: number; extraPulls?: unknown[] } = {}):
     return json({ error: "NotFound" }, 404);
   };
   return { fetch: f as Deps["fetch"], calls };
+}
+
+// Another open pull from the same source branch into the same target, the way
+// stacked pulls on Tangled look. Its one round ends at headSha.
+export function stackedPull(rkey: string, headSha: string) {
+  const cid = `bafkstacked${rkey}`;
+  return {
+    pull: {
+      uri: `at://${AUTHOR_DID}/sh.tangled.repo.pull/${rkey}`,
+      cid: `bafyrei${rkey}`,
+      state: "open",
+      value: {
+        ...pullValue(0),
+        title: `Stacked ${rkey}`,
+        rounds: [{ createdAt: "2026-10-15T00:00:00Z", patchBlob: { $type: "blob", mimeType: "application/gzip", ref: { $link: cid }, size: 1 } }],
+      },
+    },
+    blobs: { [cid]: patch(headSha, "src/b.ts", `stacked ${rkey}`) },
+  };
 }
 
 export const PIPELINE_ENV = {

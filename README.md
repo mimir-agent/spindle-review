@@ -118,6 +118,12 @@ Tangled's appview picks it up from the firehose and shows it on the pull request
   request". Use a dedicated bot account.
 - **A new round may not be indexed yet.** If the pipeline starts before Tangled's index has the new
   round, spindle-review stops with an error instead of reviewing the wrong round. Rerun the pipeline.
+- **Stacked pull requests are matched by commit.** Spindle does not say which pull request started a
+  pipeline, only the branches and the commit. When several open pull requests share the same source
+  and target branch, spindle-review reviews the one whose latest round ends at that commit. If none
+  does (the round is not indexed yet), or more than one does (two pull requests pushed with the same
+  commit), it stops with an error naming them and posts nothing. Run it with `--pull <at-uri>` by
+  hand to review one of them.
 - **Future `claude` releases.** Anthropic has said `--bare` will become the default for `-p` in a
   future release. If that happens without a way to opt out, subscription tokens will stop working here
   and only `ANTHROPIC_API_KEY` will.
