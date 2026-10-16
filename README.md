@@ -62,8 +62,11 @@ spindle-review [--pull <at-uri>] [--round <n>] [--repo-dir <path>] [--dry-run]
 - `--pull` and `--round` review a specific pull request and round, for example from your laptop:
 
   ```sh
+  git clone https://github.com/mimir-agent/spindle-review.git ~/spindle-review
+  (cd ~/spindle-review && npm ci && npm run build)
   cd path/to/checkout-at-the-pull-request-head
-  spindle-review --dry-run --local-auth --pull at://did:plc:.../sh.tangled.repo.pull/3m...
+  node ~/spindle-review/bin/spindle-review.js --dry-run --local-auth \
+    --pull at://did:plc:.../sh.tangled.repo.pull/3m...
   ```
 
 Repository guidance in `AGENTS.md`, `CLAUDE.md` or `REVIEW.md` at the repository root is given to the

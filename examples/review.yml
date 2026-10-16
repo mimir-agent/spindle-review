@@ -23,14 +23,19 @@ dependencies:
     - cacert
 
 steps:
-  - name: "Install the reviewer and the claude CLI"
+  - name: "Install the claude CLI and the reviewer"
     # nixpkgs packages claude-code as unfree, so install it from npm instead.
+    # Pin SPINDLE_REVIEW_REF to a commit you have read.
     command: |
       set -euo pipefail
-      npm install --global --prefix "$HOME/.local" @anthropic-ai/claude-code github:mimir-agent/spindle-review
+      SPINDLE_REVIEW_REF="main"
+      npm install --global --prefix "$HOME/.local" @anthropic-ai/claude-code
+      git clone --quiet https://github.com/mimir-agent/spindle-review.git "$HOME/spindle-review"
+      git -C "$HOME/spindle-review" checkout --quiet "$SPINDLE_REVIEW_REF"
+      (cd "$HOME/spindle-review" && npm ci --no-audit --no-fund && npm run build)
 
   - name: "Review this round"
     command: |
       set -euo pipefail
       export PATH="$HOME/.local/bin:$PATH"
-      spindle-review --max-turns 30 --timeout 900
+      node "$HOME/spindle-review/bin/spindle-review.js" --max-turns 30 --timeout 900
