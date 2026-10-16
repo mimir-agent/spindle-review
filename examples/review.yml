@@ -1,0 +1,41 @@
+# .tangled/workflows/review.yml
+#
+# Reviews each round of a same-repo branch pull request and posts one comment.
+# Set these secrets under Settings -> Secrets:
+#   CLAUDE_CODE_OAUTH_TOKEN  from `claude setup-token` (or ANTHROPIC_API_KEY)
+#   ATP_IDENTIFIER           handle or DID of the account that posts the review
+#   ATP_APP_PASSWORD         an app password for that account
+
+when:
+  - event: ["pull_request"]
+    branch: ["main"]
+
+engine: "nixery"
+
+# The reviewer reads git history around the change; a deeper clone helps.
+clone:
+  depth: 50
+
+dependencies:
+  nixpkgs:
+    - nodejs_24
+    - git
+    - cacert
+
+steps:
+  - name: "Install the claude CLI and the reviewer"
+    # nixpkgs packages claude-code as unfree, so install it from npm instead.
+    # Pin SPINDLE_REVIEW_REF to a commit you have read.
+    command: |
+      set -euo pipefail
+      SPINDLE_REVIEW_REF="main"
+      npm install --global --prefix "$HOME/.local" @anthropic-ai/claude-code
+      git clone --quiet https://github.com/mimir-agent/spindle-review.git "$HOME/spindle-review"
+      git -C "$HOME/spindle-review" checkout --quiet "$SPINDLE_REVIEW_REF"
+      (cd "$HOME/spindle-review" && npm ci --no-audit --no-fund && npm run build)
+
+  - name: "Review this round"
+    command: |
+      set -euo pipefail
+      export PATH="$HOME/.local/bin:$PATH"
+      node "$HOME/spindle-review/bin/spindle-review.js" --max-turns 30 --timeout 900

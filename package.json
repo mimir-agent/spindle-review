@@ -1,0 +1,39 @@
+{
+  "name": "@mimir-agent/spindle-review",
+  "version": "0.1.0",
+  "description": "Quiet, round-aware pull request review for Tangled, run on your own spindle with your own subscription",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mimir-agent/spindle-review.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mimir-agent/spindle-review/issues"
+  },
+  "homepage": "https://github.com/mimir-agent/spindle-review#readme",
+  "bin": {
+    "spindle-review": "./bin/spindle-review.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist/",
+    "bin/spindle-review.js",
+    "examples/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/*.test.ts\"",
+    "check": "npm run typecheck && npm test",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
